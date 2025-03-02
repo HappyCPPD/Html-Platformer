@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformar</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB, #1E90FF);
+            font-family: Arial, sans-serif;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #mainMenu {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
+        
+        #gameCanvas {
+            background-color: transparent;
+        }
+        
+        .menuTitle {
+            font-size: 3em;
+            color: white;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .menuButton {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.3s;
+            width: 200px;
+        }
+        
+        .menuButton:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+        
+        #gameOverMenu {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
+        
+        #scoreDisplay {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            color: rgb(0, 0, 0);
+            font-size: 24px;
+            z-index: 5;
+        }
+        
+        #highScoreDisplay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: rgba(0, 0, 0, 0.733);
+            font-size: 24px;
+            z-index: 5;
+        }
+        
+        #speedDisplay {
+            position: absolute;
+            top: 70px;
+            right: 10px;
+            color: rgb(0, 0, 0);
+            font-size: 16px;
+            z-index: 5;
+        }
+        
+        #controlsDisplay {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            z-index: 5;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        
+        .jumpIndicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: white;
+            margin-right: 5px;
+        }
+        
+        .jumpAvailable {
+            background-color: #4CAF50;
+        }
+        
+        #jumpIndicators {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="mainMenu">
+            <h1 class="menuTitle">Platform Adventure</h1>
+            <button class="menuButton" id="startButton">Start Game</button>
+            <button class="menuButton" id="instructionsButton">Instructions</button>
+            <div id="menuHighScore" style="color: white; margin-top: 20px; font-size: 20px;">High Score: 0</div>
+        </div>
+        
+        <div id="gameOverMenu">
+            <h1 class="menuTitle">Game Over</h1>
+            <h2 id="finalScore" style="color: white; margin-bottom: 10px;">Score: 0</h2>
+            <h3 id="gameOverHighScore" style="color: white; margin-bottom: 20px;">High Score: 0</h3>
+            <button class="menuButton" id="restartButton">Play Again</button>
+            <button class="menuButton" id="menuButton">Main Menu</button>
+        </div>
+        
+        <div id="scoreDisplay">Score: 0</div>
+        <div id="highScoreDisplay">High Score: 0</div>
+        <div id="speedDisplay">Speed: 3.0</div>
+        <div id="controlsDisplay">UP/SPACE: Jump (Double Jump Available) | S: Fast Fall</div>
+        <div id="jumpIndicators">
+            <span class="jumpIndicator jumpAvailable"></span>
+            <span class="jumpIndicator jumpAvailable"></span>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        let canvas, ctx;
+        let player = {
+            x: 0,
+            y: 0,
+            width: 30,
+            height: 30,
+            velocityY: 0,
+            jumpCount: 0,
+            maxJumps: 2,
+            gravity: 0.5,
+            jumpStrength: -12,
+            fastFallSpeed: 3,
+            speed: 5
+        };
+        
+        let gameActive = false;
+        let score = 0;
+        let highScore = 0;
+        let platforms = [];
+        let obstacles = [];
+        let gameSpeed = 2;
+        let platformTimer = 0;
+        let platformInterval = 60; 
+        let scrollX = 0;
+        let keys = {};
+        let speedIncreaseTimer = 0;
+        let speedIncreaseInterval = 300; 
+        
+        function loadHighScore() {
+            const savedHighScore = localStorage.getItem('platformGameHighScore');
+            if (savedHighScore) {
+                highScore = parseInt(savedHighScore);
+                updateHighScoreDisplay();
+            }
+        }
+        
+        function saveHighScore() {
+            localStorage.setItem('platformGameHighScore', highScore);
+        }
+        
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx = canvas.getContext('2d');
+            
+            loadHighScore();
+            resetGame();
+            
+            window.addEventListener('keydown', function(e) {
+                keys[e.key] = true;
+                
+                if ((e.key === 'ArrowUp' || e.key === ' ' || e.key === 'w') && player.jumpCount < player.maxJumps) {
+                    player.velocityY = player.jumpStrength;
+                    player.jumpCount++;
+                    updateJumpIndicators();
+                }
+                
+                if (!gameActive && document.getElementById('mainMenu').style.display !== 'none') {
+                    startGame();
+                }
+            });
+            
+            window.addEventListener('keyup', function(e) {
+                keys[e.key] = false;
+            });
+            
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('instructionsButton').addEventListener('click', showInstructions);
+            document.getElementById('restartButton').addEventListener('click', startGame);
+            document.getElementById('menuButton').addEventListener('click', showMainMenu);
+            
+            animate();
+        }
+        
+        function resetGame() {
+            player.x = 100;
+            player.y = canvas.height / 2;
+            player.velocityY = 0;
+            player.jumpCount = 0;
+            
+            platforms = [];
+            obstacles = [];
+            score = 0;
+            gameSpeed = 3;
+            scrollX = 0;
+            speedIncreaseTimer = 0;
+            
+            generateInitialPlatforms();
+            updateJumpIndicators();
+            updateSpeedDisplay();
+        }
+        
+        function startGame() {
+            resetGame();
+            document.getElementById('mainMenu').style.display = 'none';
+            document.getElementById('gameOverMenu').style.display = 'none';
+            gameActive = true;
+            updateScore(0);
+        }
+        
+        function showMainMenu() {
+            gameActive = false;
+            document.getElementById('mainMenu').style.display = 'flex';
+            document.getElementById('gameOverMenu').style.display = 'none';
+            document.getElementById('menuHighScore').textContent = 'High Score: ' + highScore;
+        }
+        
+        function gameOver() {
+            gameActive = false;
+            document.getElementById('gameOverMenu').style.display = 'flex';
+            document.getElementById('finalScore').textContent = 'Score: ' + score;
+            document.getElementById('gameOverHighScore').textContent = 'High Score: ' + highScore;
+            
+            if (score > highScore) {
+                highScore = score;
+                saveHighScore();
+                updateHighScoreDisplay();
+                document.getElementById('gameOverHighScore').textContent = 'New High Score: ' + highScore + '!';
+            }
+        }
+        
+        function showInstructions() {
+            alert("Use SPACE or UP ARROW to jump (double jump available).\nHold S key to fall faster.\nNavigate through platforms to score points.\nAvoid falling off the screen or hitting obstacles!\n\nThe game speed increases as you play!");
+        }
+        
+        function updateJumpIndicators() {
+            const indicators = document.querySelectorAll('.jumpIndicator');
+            for (let i = 0; i < indicators.length; i++) {
+                if (i < player.maxJumps - player.jumpCount) {
+                    indicators[i].classList.add('jumpAvailable');
+                } else {
+                    indicators[i].classList.remove('jumpAvailable');
+                }
+            }
+        }
+        
+        function updateSpeedDisplay() {
+            document.getElementById('speedDisplay').textContent = 'Speed: ' + gameSpeed.toFixed(1);
+        }
+        
+        function generateInitialPlatforms() {
+            platforms.push({
+                x: 0,
+                y: canvas.height - 100,
+                width: 300,
+                height: 20
+            });
+            
+            for (let i = 0; i < 10; i++) {
+                generatePlatform();
+            }
+        }
+        
+        function generatePlatform() {
+            const lastPlatform = platforms[platforms.length - 1];
+            
+            const minGap = 100;
+            const maxGap = 250;
+            const gap = minGap + Math.random() * (maxGap - minGap);
+            
+            const minHeight = canvas.height * 0.4;
+            const maxHeight = canvas.height * 0.7;
+            
+            
+            let baseHeight = lastPlatform.y;
+            const maxHeightDifference = 150; 
+            
+            let minPossibleHeight = Math.max(baseHeight - maxHeightDifference, minHeight);
+            let maxPossibleHeight = Math.min(baseHeight + maxHeightDifference, maxHeight);
+            
+            minPossibleHeight = Math.max(minPossibleHeight, canvas.height * 0.3);
+            maxPossibleHeight = Math.min(maxPossibleHeight, canvas.height * 0.8);
+            
+            const y = minPossibleHeight + Math.random() * (maxPossibleHeight - minPossibleHeight);
+            
+            const minWidth = 100;
+            const maxWidth = 300;
+            const width = minWidth + Math.random() * (maxWidth - minWidth);
+            
+            platforms.push({
+                x: lastPlatform.x + lastPlatform.width + gap,
+                y: y,
+                width: width,
+                height: 20
+            });
+            
+            const obstacleChance = 0.3 + Math.min(0.4, score / 10000);
+            if (Math.random() < obstacleChance) {
+                obstacles.push({
+                    x: lastPlatform.x + lastPlatform.width + gap + width/2,
+                    y: y - 30,
+                    width: 20,
+                    height: 30
+                });
+            }
+        }
+        
+        function update() {
+            if (!gameActive) return;
+            
+            player.velocityY += player.gravity;
+            
+            if (keys['s'] || keys['S'] || keys['ArrowDown']) {
+                player.velocityY += player.fastFallSpeed;
+            }
+            
+            player.y += player.velocityY;
+            
+            scrollX += gameSpeed;
+            
+            let onPlatform = false;
+            for (let platform of platforms) {
+                const relativePlatformX = platform.x - scrollX;
+                
+                if (player.velocityY > 0 &&
+                    player.x < relativePlatformX + platform.width &&
+                    player.x + player.width > relativePlatformX &&
+                    player.y + player.height > platform.y &&
+                    player.y + player.height < platform.y + platform.height + player.velocityY) {
+                    player.y = platform.y - player.height;
+                    player.velocityY = 0;
+                    player.jumpCount = 0;
+                    onPlatform = true;
+                    updateJumpIndicators();
+                }
+            }
+            
+            for (let obstacle of obstacles) {
+                const relativeObstacleX = obstacle.x - scrollX;
+                
+                if (player.x < relativeObstacleX + obstacle.width &&
+                    player.x + player.width > relativeObstacleX &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + player.height > obstacle.y) {
+                    gameOver();
+                    return;
+                }
+            }
+            
+            platformTimer++;
+            if (platformTimer > platformInterval) {
+                generatePlatform();
+                platformTimer = 0;
+            }
+            
+            platforms = platforms.filter(platform => platform.x + platform.width - scrollX > -100);
+            obstacles = obstacles.filter(obstacle => obstacle.x - scrollX > -100);
+            
+            if (player.y > canvas.height) {
+                gameOver();
+                return;
+            }
+            
+            if (gameActive) {
+                updateScore(score + 1);
+                
+                speedIncreaseTimer++;
+                if (speedIncreaseTimer >= speedIncreaseInterval) {
+                    gameSpeed += 0.1;
+                    updateSpeedDisplay();
+                    speedIncreaseTimer = 0;
+                    
+                    
+                    platformInterval = Math.max(30, 60 - (gameSpeed - 3) * 5);
+                }
+            }
+        }
+        
+        function updateScore(newScore) {
+            score = newScore;
+            document.getElementById('scoreDisplay').textContent = 'Score: ' + score;
+        }
+        
+        function updateHighScoreDisplay() {
+            document.getElementById('highScoreDisplay').textContent = 'High Score: ' + highScore;
+            document.getElementById('menuHighScore').textContent = 'High Score: ' + highScore;
+        }
+        
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+            
+            ctx.fillStyle = '#8B4513';
+            for (let platform of platforms) {
+                ctx.fillRect(platform.x - scrollX, platform.y, platform.width, platform.height);
+                
+                ctx.fillStyle = '#228B22';
+                ctx.fillRect(platform.x - scrollX, platform.y - 5, platform.width, 5);
+                ctx.fillStyle = '#8B4513';
+            }
+            
+            ctx.fillStyle = '#FF0000';
+            for (let obstacle of obstacles) {
+                ctx.fillRect(obstacle.x - scrollX, obstacle.y, obstacle.width, obstacle.height);
+            }
+            
+            drawPlayer();
+        }
+        
+        function drawBackground() {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            
+            const cloudScrollSpeed = scrollX * 0.3;
+            
+            for (let i = 0; i < 5; i++) {
+                const cloudX = ((i * 300) - (cloudScrollSpeed % 1500));
+                
+                ctx.beginPath();
+                ctx.arc(cloudX, 100, 30, 0, Math.PI * 2);
+                ctx.arc(cloudX + 25, 85, 25, 0, Math.PI * 2);
+                ctx.arc(cloudX - 25, 85, 25, 0, Math.PI * 2);
+                ctx.arc(cloudX + 15, 75, 20, 0, Math.PI * 2);
+                ctx.arc(cloudX - 15, 75, 20, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function drawPlayer() {
+            ctx.fillStyle = '#0000FF';
+            
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(player.x + player.width - 12, player.y + 8, 5, 5);
+            ctx.fillRect(player.x + player.width - 12, player.y + 18, 5, 5);
+            
+            if (player.velocityY < 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                for (let i = 0; i < 3; i++) {
+                    const particleSize = Math.random() * 5 + 2;
+                    ctx.fillRect(
+                        player.x + Math.random() * player.width,
+                        player.y + player.height,
+                        particleSize,
+                        particleSize
+                    );
+                }
+            } else if (keys['s'] || keys['S'] || keys['ArrowDown']) {
+                ctx.fillStyle = 'rgba(255, 100, 100, 0.7)';
+                for (let i = 0; i < 3; i++) {
+                    const particleSize = Math.random() * 5 + 2;
+                    ctx.fillRect(
+                        player.x + Math.random() * player.width,
+                        player.y,
+                        particleSize,
+                        particleSize
+                    );
+                }
+            }
+        }
+        
+        function animate() {
+            update();
+            draw();
+            requestAnimationFrame(animate);
+        }
+        
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        window.onload = init;
+    </script>
+</body>
+</html>
